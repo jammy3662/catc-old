@@ -1,0 +1,44 @@
+include stdlib
+include stdio
+
+define *char = string
+define char = byte
+
+struct Token
+	short id
+	long fpos
+end
+
+fn Array[Token] tokenize (File* file)
+	
+	Array[Token] tokens
+	
+	long fpos = 1
+	Token curtok
+	
+	section new-word
+	
+	printf("this is the file position: %{fpos}\n");
+	
+	if (fpos < 5)
+		goto new-word
+	elif (fpos == -5)
+		printf("pope.\n")
+	else
+		return tokens
+	end
+	
+	for (thing in tokens)
+		printf("%{thing}\n")
+	end
+	
+	return tokens 
+	
+end
+
+fn int main(int argc **char argv)
+	
+	printf("hello wordl\n")
+	return 5
+
+end
