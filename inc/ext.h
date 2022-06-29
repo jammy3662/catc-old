@@ -7,6 +7,13 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include <math.h>
+
+typedef int8_t byte;
+typedef u_int8_t ubyte;
+
+#define PI M_PI
+
 // A series of extensions for c and c++ functionality.
 
 #ifdef ZALGO_EXT_IO
@@ -50,7 +57,7 @@ bool str1char(char* str)
 
 // returns position of first occurence of _c_ in _str_
 // if _c_ not found in _str_, returns 0
-int strhas(char* str, char c)
+int strhaschar(char* str, char c)
 {
 	int pos = 1;
 	while (*str != 0)
@@ -85,6 +92,38 @@ int binint(char* n)
 }
 
 template <class T>
+inline void flagset(T & field, byte bit)
+{
+	field |= 1 << bit;
+}
+template <class T>
+inline void flagclear(T & field, byte bit)
+{
+	field &= ~(1 << bit);
+}
+template <class T>
+inline T flag(T field, byte bit)
+{
+	return field & (1 << bit);
+}
+
+inline float rad(float deg) {
+	return deg * PI / 180;
+}
+
+inline float deg(float rad) {
+	return rad * 180 / PI;
+}
+
+constexpr float RAD(float DEG) {
+	return DEG * PI / 180;
+}
+
+constexpr float DEG(float RAD) {
+	return RAD * 180 / PI;
+}
+
+template <class T>
 inline T min(T a, T b) {
 	return (a < b) ? a : b;
 }
@@ -93,6 +132,65 @@ template <class T>
 inline T max(T a, T b) {
 	return (a > b) ? a : b;
 }
+
+/*
+struct string
+{
+	char* str;
+//	int size;	// not gonna implement this yet
+	int capacity;
+
+	// initialize empty string
+	string()
+	{
+		str = 0x0;
+		//size = 0;
+		capacity = 0;
+	}
+
+	// initialize string with specific capacity
+	string(int cap)
+	{
+		capacity = cap;
+		//size = 0;
+		str = (char*) malloc(sizeof(char) * capacity);
+		str[capacity - 1] = 0; // null terminate for compatibility
+	}
+
+	// initialize string with specific data
+	string(char* ini)
+	{
+		capacity = strlen(ini);
+		//size = capacity;
+		str = (char*) malloc(sizeof(char) * capacity);
+		memcpy(str, ini, capacity);
+	}
+
+	// initialize string with specific data and capacity
+	string(char* ini, int cap)
+	{
+		//size = strlen(ini);
+		//capacity = max(size, cap); // capacity must be at least size of initial string
+		capacity = max((int)strlen(ini), cap);
+		str = (char*) malloc(sizeof(char) * capacity);
+		memcpy(str, ini, capacity);
+	}
+
+	void free()
+	{
+		free(str);
+		capacity = 0;
+	}
+
+	char& operator[] (int idx)
+	{
+		#ifdef ZALGO_EXT_ERR
+			if (idx >= capacity) fprintf(stderr, "string %p: out of bounds index %i\n", this, idx);
+			#endif
+		return str[idx];
+	}
+};
+*/
 
 template <class T>
 struct dlnode { // Doubly linked node
@@ -113,7 +211,7 @@ struct List {
 		last = NULL;
 		size = 0;
 	}
-	
+
 	int append(T val) {
 		size++;
 		dlnode<T>* add = new dlnode<T>;
@@ -164,7 +262,7 @@ struct List {
 		add->next = following;
 		following->prev = add;
 	}
-	
+
 	int remove(int idx) {
 		if (idx < 0 or idx > size - 1) return -1;
 		size--;
@@ -202,7 +300,7 @@ struct List {
 		free(current);
 		return size;
 	}
-	
+
 	int find(T val) {
 		if (size == 0) return -1;
 		dlnode<T>* current = first;
@@ -212,7 +310,7 @@ struct List {
 		}
 		return -1;
 	}
-	
+
 	T get(int idx) {
 		if (idx < 0 or idx > size - 1 or size == 0) return NULL;
 		dlnode<T>* current = first;
@@ -222,7 +320,7 @@ struct List {
 		if (current == NULL) return NULL;
 		return current->value;
 	}
-	
+
 	T operator[](int idx)
 	{
 		return get(idx);
@@ -279,6 +377,17 @@ struct Array {
 		size++;
 		return 0;
 	}
+	// append an entire array to the end of this one
+	// (does not free memory of concatenated array)
+	int concatenate(Array<T> array)
+	{
+		if (! realloc(data, (this->size + array.size) * sizeof(T)) )
+			return -1;
+		
+		memcpy((data + size), array.data, array.size * sizeof(T));
+		size += array.size;
+		return size;
+	}
 	// returns -1 for not enough memory
 	int insert(T value, int idx) {
 		T* attempt = (T*) realloc(data, sizeof(T) * (size + 1));
@@ -300,18 +409,18 @@ struct Array {
 	{
 		free(data);
 		data = 0x0;
-		size = 0;	
+		size = 0;
 	}
 	// returns NULL for invalid index
 	inline T & get(int idx) {
 		return data[idx];
 	}
-	
+
 	T & operator[](int idx)
 	{
 		return data[idx];
 	}
-	
+
 	// does nothing for invalid index
 	inline void set(int idx, T value) {
 		if (idx < 0 or idx > size - 1) return;
@@ -342,25 +451,25 @@ struct Table
 	T data[size];
 	int next = 0;
 	int last = 0;
-	
+
 	void add(T item)
 	{
 		data[next] = item;
-		
+
 	}
 };
 
 struct nenum: Array<char*>
 {
 	nenum() {}
-	
-	nenum(char** keys, int ct) 
+
+	nenum(char** keys, int ct)
 	{
 		int keybytes = sizeof(char*) * ct;
 		allocate(ct);
 		memcpy(data, keys, keybytes);
 	}
-	
+
 	inline int operator[](char* key)
 	{
 		for (int i = 0; i < size; i++)
@@ -376,22 +485,22 @@ struct Dict
 {
 	Array<char*> keys;
 	Array<T> values;
-	
+
 	void add(char* key, T value)
 	{
 		keys.append(key);
 		values.append(value);
 	}
-	
+
 	// removes first element with 'key'
 	void remove(char* key)
 	{
 		for (int i = 0; i < keys.size; i++)
 		{
-			
+
 		}
 	}
-	
+
 	// returns index of first element matching 'key'
 	// returns -1 if key not found
 	int find(char* key)
@@ -402,7 +511,7 @@ struct Dict
 		}
 		return -1;
 	}
-	
+
 	// returns index of first element matching 'value'
 	// returns -1 if value not found
 	int find(T value)

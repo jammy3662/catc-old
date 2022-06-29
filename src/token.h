@@ -3,11 +3,22 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-typedef char* string;
-typedef char byte;
+// type based allocation (using malloc)
+#define talloc(COUNT, TYPE) (TYPE*)malloc(COUNT * sizeof(TYPE))
+#define tcalloc(COUNT, TYPE) (TYPE*)calloc(COUNT, sizeof(TYPE))
+#define trealloc(PTR, COUNT, TYPE) (TYPE*)realloc(PTR, COUNT * sizeof(TYPE))
 
-string word_terminators = " \t\n+,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=";
-string numeric = "0123456789";
+/* dont think i actually need this
+
+// characters considered to mark the end of the current token being read
+char* word_terminators = " \t\n+,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=";
+
+*/
+
+// valid characters for identifiers
+char* alpha = "_ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZabcdefABCDEF";
+// valid characters for numerics
+char* numeric = "_0123456789";
 
 enum
 {
@@ -42,7 +53,7 @@ enum
 };
 
 // user modifiable for dynamic custom syntax
-typedef struct {string str; short id;} __tokendict;
+typedef struct {char* str; short id;} __tokendict;
 __tokendict tokenid[] = 
 {
 	// syntax
@@ -82,13 +93,13 @@ __tokendict tokenid[] =
 	{"return", t_return},
 };
 
-short process_word(string word)
+short process_word(char* word)
 {
 	if (*word != '\n') printf("'%s'\n", word);
 	else printf("'\\n'\n");
 	
 	if (*word == '\n') return t_endcmd;
-	if (strhas(numeric, *word) > -1) return t_
+	//if (strhas(numeric, *word) > -1) return t_
 	
 	for (int i = 0; i < sizeof(tokenid) / sizeof(__tokendict); i++)
 	{
@@ -99,95 +110,162 @@ short process_word(string word)
 
 struct Token
 {
-	short id;
-	long fpos; // position in (input) file
+	short id = 0;
+	long fpos = 0; // position in (input) file
+	char* value = 0x0;
 };
 
-// assumes a valid file descriptor seeked to beginning
-Array<Token> tokenize(FILE* file)
+Token get_token(FILE* file, char& current, long& fpos)
 {
-	Array<Token> tokens;
+	Token token;
+	token.fpos = fpos;
 	
-	long fpos = 1;
+	short token_size = 8;
 	
-	new_word:
+	// actual content pulled from file
+	char* part = tcalloc(token_size + 1, char);
+	part[token_size] = 0;
 	
-	Token curtok;
-	curtok.fpos = fpos;
+	// position in current token
+	short idx = 0;
 	
-	bool number = false;
-	int bufln = 10; // length of string buffer
-	int bufpos = 0; // index position in current buffer
-	int bufidx = 0; // number of extra buffers allocated for word
-	string word = (string) malloc(sizeof(char) * bufln);
+	bool name = false;
 	
-	char curc = 0; // previous character read from file, current in memory
+	bool  number = false;
+	bool decimal = false;
+	bool  binary = false;
+	bool     hex = false;
 	
-	// null-terminated buffer for non-whitespace word terminators
-	// flushed every full_word
-	char terminal[2] = {0,0};
+	// special logic for the first character in a token
+	// (identifiers/names cannot start with a number)
+	// (numbers cannot start with a decimal)
 	
-	read_word:
-	
-	for (bufpos = 0; bufpos < bufln; bufpos++)
+	if (strhaschar(numeric + 1, current))
 	{
-		curc = fgetc(file);
+		number = true;
+		goto update;
+	}
+	if (strhaschar(alpha, current))
+	{
+		name = true;
+		goto update;
+	}
+	
+read:
+	
+	// token is a number
+	if (number)
+	{
+		// binary and hex formatted numeric literals
+		if (idx == 1)
+		{
+			if (current == 'b')
+			{
+				binary = true;
+				goto update;
+			}
+			if (current == 'x')
+			{
+				hex = true;
+				goto update;
+			}
+		}
+		
+		// decimal (floating point) numeric literals
+		if (current == '.')
+		{
+			if (!decimal and !binary and !hex)
+			{
+				decimal = true;
+				goto update;
+			}
+			else goto interrupt;
+		}
+		
+		// no longer a number, end token
+		if (!strhaschar(numeric, current))
+		{
+			if (hex and strhaschar(alpha + 41, current)) goto update;
+			goto interrupt;
+		}
+		goto update;
+	}
+	
+	// token is not a number
+	// if its an alphabetical token and the current character is alphabetical, keep reading
+	if (name)
+	{
+		if (strhaschar(alpha, current) or strhaschar(numeric + 1, current)) goto update;
+		else goto interrupt;
+	}
+	
+	if (current == '\n') printf("newline\n");
+	
+	goto finish;
+	
+update:
+	
+	// write current character into string
+	part[idx] = current;
+	
+	idx++;
+	// if the string needs more space, double its size
+	// likelihood of resizing decreases quadratically with each resize
+	if (idx == token_size - 1)
+	{
+		token_size *= 2;
+		part = trealloc(part, token_size + 1, char);
+		part[token_size] = 0;
+	}
+	
+	fpos++;
+	current = fgetc(file);
+	goto read;
+	
+interrupt:
+	
+	// get rid of whitespace to avoid reading empty token next call
+	while (current == ' ' or current == '\t' or current == '\r' or current == '\v' or current == '\f')
+	{
 		fpos++;
-		
-		if (curc == EOF) goto finalize;
-		
-		if (curc == '-' && bufpos == 0) // distinguish unary subtraction operator
-		{
-			*terminal = '-';
-			goto full_word;
-		}
-		
-		if (strhas(numeric, curc) && bufpos == 0) numeric = true;
-		
-		int tpos;
-		if (!numeric) tpos = strhas(word_terminators, curc);
-		else          tpos = !strhas(numeric);
-		if (tpos)
-		{
-			if (tpos > 2 && curc != '.' && !number) *terminal = curc;
-			else *terminal = 0;
-			goto full_word;
-		}
-		*(word + (bufidx * bufln) + bufpos) = curc;
+		current = fgetc(file);
 	}
 	
-	bufidx++;
-	word = (string) realloc(word, sizeof(char) * (bufln * bufidx + 1));
-	goto read_word; // continue reading until a word terminator is found
+	token.value = part;
 	
-	full_word:
+	if (number and !decimal and !hex and !binary) printf("number: %s\n", part);
+	if (number and decimal) printf("float: %s\n", part);
+	if (number and hex) printf("hex: %s\n", part);
+	if (number and binary) printf("binary: %s\n", part);
+	if (name) printf("alphabetical: %s\n", part);
+	//else printf("thing: %s\n", part);
 	
-	*(word + (bufidx * bufln) + bufpos) = 0; // null terminate string
+	return token;
 	
-	if (*word != 0)  // ignore empty strings caused by consecutive word terminators
+finish:
+	
+	fpos++;
+	current = fgetc(file);
+	
+	// get rid of whitespace to avoid reading empty token next call
+	while (current == ' ' or current == '\t' or current == '\r' or current == '\v' or current == '\f')
 	{
-		short id = process_word(word);
-		printf("%i\n", id);
-		curtok.id = id;
-		tokens.append(curtok);
+		fpos++;
+		current = fgetc(file);
 	}
 	
-	free(word);
+	printf("_\n");
+	return token;
 	
-	// flush word terminator buffer by processing as word (like it should be)
-	if (*terminal != 0) 
+}
+
+void get_tokens(FILE* file, Array<Token>& tokens)
+{
+	long fpos = 0;
+	char current = fgetc(file);
+	
+	while (current != EOF)
 	{
-		short id = process_word(terminal);
-		printf("%i\n", id);
-		curtok.fpos = fpos - 1;
-		tokens.append(curtok);
-		
-		*terminal = 0;
+		tokens.append(get_token(file, current, fpos));
 	}
-	
-	goto new_word;
-	
-	finalize:
-	
-	return tokens;
 }
