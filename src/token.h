@@ -113,10 +113,9 @@ Token get_token(FILE* file)
 	string str = string(8);
 	
 	byte comment = 0;
-	bool onemore = false; // set if reading multi-character symbol
-	                   // (like digraphs, trigaphs, yknow)
 
 read:
+	if (current == EOF) goto done;
 	
 	if      (str.last == 0 and strhaschar(numeric + 1, current)) token.id = INT_LITERAL;
 	else if (str.last == 0 and strhaschar(alpha,       current)) token.id =        NAME;
@@ -266,13 +265,6 @@ done:
 		current = fgetc(file);
 	}
 	
-	if (onemore)
-	{
-		ungetc(current, file);
-		//current = str.data[str.last - 1];
-		str.cut(1);
-	}
-	
 	printf("%i: %s\n", token.id, str.data);
 	
 	str.trim();
@@ -282,11 +274,12 @@ done:
 
 void get_tokens(FILE* file, Array<Token>& tokens)
 {
-	long fpos = 0;
-	char current = 0;
+	Token t;
+	t.id = 1;
 	
-	while (current != EOF)
+	while (t.id)
 	{
-		tokens.append(get_token(file));
+		t = get_token(file);
+		tokens.append(t);
 	}
 }
