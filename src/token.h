@@ -3,269 +3,290 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// type based allocation (using malloc)
-#define talloc(COUNT, TYPE) (TYPE*)malloc(COUNT * sizeof(TYPE))
-#define tcalloc(COUNT, TYPE) (TYPE*)calloc(COUNT, sizeof(TYPE))
-#define trealloc(PTR, COUNT, TYPE) (TYPE*)realloc(PTR, COUNT * sizeof(TYPE))
-
-/* dont think i actually need this
-
-// characters considered to mark the end of the current token being read
-char* word_terminators = " \t\n+,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=";
-
-*/
+#include "ext.h"
 
 // valid characters for identifiers
-char* alpha = "_ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZabcdefABCDEF";
+char* const alpha = "_ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZabcdefABCDEF";
 // valid characters for numerics
-char* numeric = "_0123456789";
+char* const numeric = "_0123456789";
 
-enum
+// +,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=
+
+enum TOKEN
 {
-	t_null = -1, // invalid token (error handling)
+	NONE = -1,
 	
-	t_idtf, // identifier
-	t_const,
+	PLUS,          // +
+	MINUS,         // -
+	STAR,          // *
+	SLASH,         // /
+	BACKSLASH,     // (\)
+	PIPE,          // |   (pip)
 	
-	t_endcmd,
-	t_endscope,
-	t_closepar,
-	t_openpar,
+	DOT,           // .
+	COMMA,         // ,
+	LESSTHAN,      // <
+	MORETHAN,      // >
+	LESSEQUAL,     // <=
+	MOREEQUAL,     // >=
+	SHIFT_L,       // <<
+	SHIFT_R,       // >>
 	
-	t_type,
+	EQUAL,         // ==
+	ASSIGN,        // =
 	
-	t_include,
-	t_define,
-	t_alias,
+	BANG,          // !
+	QUESTION,      // ?
+	AT,            // @
+	HASH,          // #
+	DOLLAR,        // $
+	PERCENT,       // %
+	CARET,         // ^
+	AMPERSAND,     // &
 	
-	t_func,
-	t_section,
-	t_goto,
-	t_for,
-	t_while,
-	t_if,
-	t_else,
-	t_elif,
-	t_switch,
-	t_continue,
-	t_break,
-	t_return,
+	BRACE_L,       // {
+	BRACE_R,       // }
+	BRACKET_L,     // [
+	BRACKET_R,     // ]
+	PARENTHESES_L, // (
+	PARENTHESES_R, // )
+	
+	COLON,         // :
+	SEMICOLON,     // ;
+	QUOTE,         // '
+	DQUOTE,        // "
+	BACKTICK,      // `
+	TILDE,         // ~
+	
+	COMMENT_L,     // /*
+	COMMENT_R,     // */
+	COMMENT,       // //
+	
+	          NAME,
+	
+	   INT_LITERAL, // 235
+	   HEX_LITERAL, // 12.45456
+	   BIN_LITERAL, // 0b011011
+	   OCT_LITERAL, // 0o734721
+	   
+	 FLOAT_LITERAL, // 12.45456
+	 
+	  BOOL_LITERAL, // true | false
+	  CHAR_LITERAL, // 'e'
+	STRING_LITERAL, // "sdfa35 sd f"
+	
+	  BYTE_TYPE,
+	 SHORT_TYPE,
+	   INT_TYPE,
+	  LONG_TYPE,
+	
+	 FLOAT_TYPE,
+	DOUBLE_TYPE,
+	
+	  BOOL_TYPE,
+	
+	  CHAR_TYPE,
+	STRING_TYPE,
+	
+	 SLICE_TYPE,
+	 ARRAY_TYPE,
+	
 };
-
-// user modifiable for dynamic custom syntax
-typedef struct {char* str; short id;} __tokendict;
-__tokendict tokenid[] = 
-{
-	// syntax
-	{";", t_endcmd}, // end command
-	{"(", t_openpar},
-	{")", t_closepar},
-	{"end", t_endscope}, // close scope
-	
-	// builtins
-	{"byte", t_type},
-	{"short", t_type},
-	{"int", t_type},
-	{"long", t_type},
-	
-	{"float", t_type},
-	{"double", t_type},
-	
-	{"char", t_type},
-	
-	// compiler directives
-	{"include", t_include},
-	{"define", t_define},
-	{"alias", t_alias},
-	
-	// control flow
-	{"fn", t_func},
-	{"section", t_section},
-	{"goto", t_goto},
-	{"for", t_for},
-	{"while", t_while},
-	{"if", t_if},
-	{"else", t_else},
-	{"elif", t_elif}, // maps to else + if
-	{"switch", t_switch},
-	{"continue", t_continue},
-	{"break", t_break},
-	{"return", t_return},
-};
-
-short process_word(char* word)
-{
-	if (*word != '\n') printf("'%s'\n", word);
-	else printf("'\\n'\n");
-	
-	if (*word == '\n') return t_endcmd;
-	//if (strhas(numeric, *word) > -1) return t_
-	
-	for (int i = 0; i < sizeof(tokenid) / sizeof(__tokendict); i++)
-	{
-		if (streq(word, tokenid[i].str)) return tokenid[i].id;
-	}
-	return t_idtf;
-}
 
 struct Token
 {
 	short id = 0;
-	long fpos = 0; // position in (input) file
+	long pos = 0; // position in (input) file
 	char* value = 0x0;
 };
 
-Token get_token(FILE* file, char& current, long& fpos)
+Token get_token(FILE* file)
 {
+	static long fpos = 0;
+	static char current = fgetc(file);
+	static bool skip = false;
+	
 	Token token;
-	token.fpos = fpos;
+	token.pos = fpos;
 	
-	short token_size = 8;
+	// 7 character buffer, 1 terminator byte
+	string str = string(8);
 	
-	// actual content pulled from file
-	char* part = tcalloc(token_size + 1, char);
-	part[token_size] = 0;
-	
-	// position in current token
-	short idx = 0;
-	
-	bool name = false;
-	
-	bool  number = false;
-	bool decimal = false;
-	bool  binary = false;
-	bool     hex = false;
-	
-	// special logic for the first character in a token
-	// (identifiers/names cannot start with a number)
-	// (numbers cannot start with a decimal)
-	
-	if (strhaschar(numeric + 1, current))
-	{
-		number = true;
-		goto update;
-	}
-	if (strhaschar(alpha, current))
-	{
-		name = true;
-		goto update;
-	}
-	
+	byte comment = 0;
+	bool onemore = false; // set if reading multi-character symbol
+	                   // (like digraphs, trigaphs, yknow)
+
 read:
 	
-	// token is a number
-	if (number)
+	if      (str.last == 0 and strhaschar(numeric + 1, current)) token.id = INT_LITERAL;
+	else if (str.last == 0 and strhaschar(alpha,       current)) token.id =        NAME;
+	
+	// some numeric token
+	if (token.id > NAME and token.id < BOOL_LITERAL)
 	{
-		// binary and hex formatted numeric literals
-		if (idx == 1)
+		// support for formatted numeric literals
+		if (str.last == 1)
 		{
-			if (current == 'b')
+			switch (current)
 			{
-				binary = true;
-				goto update;
-			}
-			if (current == 'x')
-			{
-				hex = true;
-				goto update;
+				// (binary 0b101101)
+				case 'b':
+					token.id = BIN_LITERAL;
+					goto next;
+				// (hex 0x1fe55a)
+				case 'x':
+					token.id = HEX_LITERAL;
+					goto next;
+				// (octal 0o715237)
+				case 'o':
+					token.id = OCT_LITERAL;
+					goto next;
+				default:
+					break;
 			}
 		}
 		
-		// decimal (floating point) numeric literals
-		if (current == '.')
-		{
-			if (!decimal and !binary and !hex)
-			{
-				decimal = true;
-				goto update;
-			}
-			else goto interrupt;
-		}
-		
-		// no longer a number, end token
 		if (!strhaschar(numeric, current))
 		{
-			if (hex and strhaschar(alpha + 41, current)) goto update;
-			goto interrupt;
+			// allow characters 'abcdefABCDEF' in hex literals
+			if (strhaschar(alpha + 41, current) and token.id == HEX_LITERAL) goto next;
+			// allow a decimal point to turn an int into a float
+			if (current == '.' and token.id != FLOAT_LITERAL) { token.id = FLOAT_LITERAL; goto next; }
+			// otherwise, character is not valid for the numeric token; finish token
+			goto done;
 		}
-		goto update;
+		goto next;
 	}
 	
-	// token is not a number
-	// if its an alphabetical token and the current character is alphabetical, keep reading
-	if (name)
+	#define key(ID,TOK) if(streq(ID,str.data)) { token.id = TOK; goto done; }
+	
+	// some alphabetical token like a name or identifier
+	if (token.id == NAME)
 	{
-		if (strhaschar(alpha, current) or strhaschar(numeric + 1, current)) goto update;
-		else goto interrupt;
+		// character is not valid for an identifier; finish token
+		if (!strhaschar(alpha, current) and !strhaschar(numeric + 1, current)) 
+		{
+			// keywords and builtins
+			key ("byte",   BYTE_TYPE)
+			key ("short",  SHORT_TYPE)
+			key ("int",    INT_TYPE)
+			key ("long",   LONG_TYPE)
+			key ("float",  FLOAT_TYPE)
+			key ("double", DOUBLE_TYPE)
+			key ("bool",   BOOL_TYPE)
+			key ("char",   CHAR_TYPE)
+			key ("string", STRING_TYPE)
+			key ("slice",  SLICE_TYPE)
+			key ("array",  ARRAY_TYPE)
+			
+			//key ("")
+			goto done;
+		}
+		else goto next;
 	}
 	
-	if (current == '\n') printf("newline\n");
+	#define match(C,TOK) if (str.data[str.last-1] == C) { token.id = TOK; goto done; }
 	
-	goto finish;
+	#define match2(C1,C2,TOK)\
+		if ( str.last > 0           and\
+			 str.data[str.last-1] == C1 and\
+			 current == C2 )\
+		{\
+			token.id = TOK;\
+				str.append(current);\
+				current = fgetc(file);\
+				fpos++;\
+			goto done;\
+		}
 	
-update:
+	match2 ('/','*', COMMENT_L)
+	match2 ('*','/', COMMENT_R)
+	match2 ('/','/', COMMENT)
 	
+	match  ('+',      PLUS)
+	match  ('-',      MINUS)
+	match  ('*',      STAR)
+	match  ('/',      SLASH)
+	
+	match2 ('<','=',  LESSEQUAL)
+	match2 ('>','=',  MOREEQUAL)
+	match2 ('<','<',  SHIFT_L)
+	match2 ('>','>',  SHIFT_R)
+	
+	match ('.',       DOT)
+	match (',',       COMMA)
+	match ('<',       LESSTHAN)
+	match ('>',       MORETHAN)
+	
+	match2 ('=','=',  EQUAL)
+	match  ('=',      ASSIGN)
+	
+	match ('\\',      BACKSLASH)
+	match ('|',       PIPE)
+	match ('/',       SLASH)
+	
+	match ('!',       BANG)
+	match ('?',       QUESTION)
+	match ('@',       AT)
+	match ('#',       HASH)
+	match ('$',       DOLLAR)
+	match ('%',       PERCENT)
+	match ('^',       CARET)
+	match ('&',       AMPERSAND)
+	
+	match ('{',       BRACE_L)
+	match ('}',       BRACE_R)
+	match ('[',       BRACKET_L)
+	match (']',       BRACKET_R)
+	match ('(',       PARENTHESES_L)
+	match (')',       PARENTHESES_R)
+	
+	match (':',       COLON)
+	match (';',       SEMICOLON)
+	match ('\'',      QUOTE)
+	match ('"',       DQUOTE)
+	match ('`',       BACKTICK)
+	match ('~',       TILDE)
+	
+next:
 	// write current character into string
-	part[idx] = current;
+	str.append(current);
+	if (!str.space()) str.grow();
 	
-	idx++;
-	// if the string needs more space, double its size
-	// likelihood of resizing decreases quadratically with each resize
-	if (idx == token_size - 1)
-	{
-		token_size *= 2;
-		part = trealloc(part, token_size + 1, char);
-		part[token_size] = 0;
-	}
-	
-	fpos++;
+	// move to next character in input stream
 	current = fgetc(file);
+	fpos++;
+	
 	goto read;
 	
-interrupt:
-	
-	// get rid of whitespace to avoid reading empty token next call
-	while (current == ' ' or current == '\t' or current == '\r' or current == '\v' or current == '\f')
+done:
+	while (current == ' ' or current == '\t' or current == '\n' or current == '\r' or current == '\v' or current == '\f')
 	{
 		fpos++;
 		current = fgetc(file);
 	}
 	
-	token.value = part;
-	
-	if (number and !decimal and !hex and !binary) printf("number: %s\n", part);
-	if (number and decimal) printf("float: %s\n", part);
-	if (number and hex) printf("hex: %s\n", part);
-	if (number and binary) printf("binary: %s\n", part);
-	if (name) printf("alphabetical: %s\n", part);
-	//else printf("thing: %s\n", part);
-	
-	return token;
-	
-finish:
-	
-	fpos++;
-	current = fgetc(file);
-	
-	// get rid of whitespace to avoid reading empty token next call
-	while (current == ' ' or current == '\t' or current == '\r' or current == '\v' or current == '\f')
+	if (onemore)
 	{
-		fpos++;
-		current = fgetc(file);
+		ungetc(current, file);
+		//current = str.data[str.last - 1];
+		str.cut(1);
 	}
 	
-	printf("_\n");
-	return token;
+	printf("%i: %s\n", token.id, str.data);
 	
+	str.trim();
+	token.value = str.data;
+	return token;
 }
 
 void get_tokens(FILE* file, Array<Token>& tokens)
 {
 	long fpos = 0;
-	char current = fgetc(file);
+	char current = 0;
 	
 	while (current != EOF)
 	{
-		tokens.append(get_token(file, current, fpos));
+		tokens.append(get_token(file));
 	}
 }

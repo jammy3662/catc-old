@@ -26,6 +26,7 @@ typedef u_int8_t ubyte;
 	#endif
 #endif
 
+
 namespace ZALGO_EXT {
 	// Set i to 0 to silence printf
 	int (*conditional_printf) (const char*, ...) = printf;
@@ -35,6 +36,23 @@ namespace ZALGO_EXT {
 		else conditional_printf = printf;
 	}
 };
+
+// type based allocation (using malloc)
+#define talloc(SIZE, TYPE) (TYPE*)malloc(SIZE * sizeof(TYPE))
+#define tcalloc(SIZE, TYPE) (TYPE*)calloc(SIZE, sizeof(TYPE))
+#define trealloc(PTR, SIZE, TYPE) (TYPE*)realloc(PTR, SIZE * sizeof(TYPE))
+
+// returns whether _str2_ begins with the entirety of _str1_
+bool strmatch(char* str1, char* str2)
+{
+	while (*str1 != 0)
+	{
+		if (*str2 == 0) return false;
+		if (*str1 != *str2) return false;
+		str1++; str2++;
+	}
+	return true;
+}
 
 // returns whether _str1_ exactly matches _str2_
 bool streq(char* str1, char* str2)
@@ -132,6 +150,138 @@ template <class T>
 inline T max(T a, T b) {
 	return (a > b) ? a : b;
 }
+
+struct string
+{
+	char* data = 0x0;
+	int size = 0;
+	int last = 0;
+	
+	// initialize empty string
+	string()
+	{
+		data = 0x0;
+		size = 0;
+		last = 0;
+	}
+
+	// initialize string with specific size
+	string(int s)
+	{
+		size = s;
+		data = talloc(s, char);
+		last = 0;
+		data[0] = 0; // null terminator
+	}
+
+	// initialize string with specific data
+	string(char* str)
+	{
+		size = strlen(str);
+		data = talloc(size, char);
+		memcpy(data, str, size);
+		last = size - 1;
+		data[last] = 0;
+	}
+
+	// initialize string with specific data and size
+	string(char* str, int s)
+	{
+		int strl = strlen(str);
+		size = max(s, strl);
+		data = talloc(size, char);
+		memcpy(data, str, strl);
+		last = strl - 1;
+		data[last] = 0;
+	}
+	
+	// initialize string with another string and specific size
+	// (faster than raw char pointer because skip the call to 'strlen')
+	string(string str, int s)
+	{
+		size = max(s, str.size);
+		data = talloc(size, char);
+		memcpy(data, str.data, str.size);
+		last = str.last;
+	}
+	
+	void clear()
+	{
+		free(data);
+		size = 0;
+	}
+
+	char& operator[] (int idx)
+	{
+		#ifdef ZALGO_EXT_ERR
+			if (idx >= capacity) fprintf(stderr, "string %p: out of bounds index %i\n", this, idx);
+		#endif
+		return data[idx];
+	}
+	
+	inline int space()
+	{
+		// last is zero-indexed while size is not
+		return size - last - 1;
+	}
+	
+	void append(char c)
+	{
+		if (space()) goto write;
+		
+		data = trealloc(data, size + 1, char);
+		
+		write:
+		data[last] = c;
+		last++;
+		data[last] = 0;
+	}
+	
+	void append(char* str)
+	{
+		int strl = strlen(str);
+		if (space() >= strl) goto write;
+		
+		data = trealloc(data, size + strl, char);
+		
+		write:
+		memcpy(data + last, str, strl);
+		last += strl;
+		data[last] = 0;
+	}
+	
+	void append(string str)
+	{
+		if (space() >= str.size) goto write;
+		
+		data = trealloc(data, size + str.size, char);
+		
+		write:
+		memcpy(data + last, str.data, str.size);
+		last += str.size;
+	}
+	
+	// increases size by factor of 2
+	void grow()
+	{
+		size = size << 1;
+		data = trealloc(data, size, char);
+	}
+	
+	// frees unused characters
+	void trim()
+	{
+		data = trealloc(data, last + 1, char);
+	}
+	
+	// shrink array by _s_ characters
+	void cut(int s)
+	{
+		data = trealloc(data, size - s, char);
+		last = size - 1;
+		data[last] = 0;
+	}
+};
 
 /*
 struct string
