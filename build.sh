@@ -10,7 +10,7 @@ RUN_ON_BUILD=0
 [ -z $1 ] && RUN_ON_BUILD=1
 
 clear
-cc $IN -o $OUT $FLAGS $LINK
+clang $IN -o $OUT $FLAGS $LINK
 SUCCESS=$?
 
 if [ $RUN_ON_BUILD = 0 ] && [ ! $SUCCESS -ne 0 ]; then

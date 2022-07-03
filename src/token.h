@@ -1,21 +1,18 @@
 #pragma once
-
-#include <stdlib.h>
-#include <stdio.h>
-
 #include "ext.h"
+
+// +,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=
 
 // valid characters for identifiers
 char* const alpha = "_ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZabcdefABCDEF";
 // valid characters for numerics
 char* const numeric = "_0123456789";
 
-// +,.<>/|\\!@#$%^&*(){}[]:;\'\"`~=
-
 enum TOKEN
 {
 	NONE = -1,
 	
+	// --- SYMBOLS ---
 	PLUS,          // +
 	MINUS,         // -
 	STAR,          // *
@@ -62,7 +59,16 @@ enum TOKEN
 	COMMENT_R,     // */
 	COMMENT,       // //
 	
-	          NAME,
+	// --- USER DEFINES ---
+	STRUCT,
+	PUBLIC,
+	PRIVATE,
+	UNION,
+	LET,
+	FN,
+	NAME, // anything not mapped to the language
+	
+	// --- LITERALS ---
 	
 	   INT_LITERAL, // 235
 	   HEX_LITERAL, // 12.45456
@@ -74,6 +80,8 @@ enum TOKEN
 	  BOOL_LITERAL, // true | false
 	  CHAR_LITERAL, // 'e'
 	STRING_LITERAL, // "sdfa35 sd f"
+	
+	// --- BUILTIN TYPES ---
 	
 	  BYTE_TYPE,
 	 SHORT_TYPE,
@@ -91,6 +99,38 @@ enum TOKEN
 	 SLICE_TYPE,
 	 ARRAY_TYPE,
 	
+	// --- CONTROL FLOW ---
+	IF,
+	ELIF,
+	ELSE,
+	
+	FOR,
+	IN,
+	WHILE,
+	CONTINUE,
+	BREAK,
+	
+	SWITCH,
+	CASE,
+	DEFAULT,
+	
+	GOTO,
+	RETURN,
+	
+	START,
+	END,
+	
+	// --- ATTRIBUTES ---
+	CONST,
+	STATIC,
+	EXTERN,
+	VOLATILE,
+	
+	STACK,
+	HEAP,
+	
+	// --- PREPROCESSOR ---
+	ALIAS,
 };
 
 struct Token
@@ -163,22 +203,60 @@ read:
 	if (token.id == NAME)
 	{
 		// character is not valid for an identifier; finish token
-		if (!strhaschar(alpha, current) and !strhaschar(numeric + 1, current)) 
+		if (!strhaschar(alpha, current) and !strhaschar(numeric + 1, current))
 		{
 			// keywords and builtins
-			key ("byte",   BYTE_TYPE)
-			key ("short",  SHORT_TYPE)
-			key ("int",    INT_TYPE)
-			key ("long",   LONG_TYPE)
-			key ("float",  FLOAT_TYPE)
-			key ("double", DOUBLE_TYPE)
-			key ("bool",   BOOL_TYPE)
-			key ("char",   CHAR_TYPE)
-			key ("string", STRING_TYPE)
-			key ("slice",  SLICE_TYPE)
-			key ("array",  ARRAY_TYPE)
+			key ("byte",       BYTE_TYPE)
+			key ("short",      SHORT_TYPE)
+			key ("int",        INT_TYPE)
+			key ("long",       LONG_TYPE)
+			key ("float",      FLOAT_TYPE)
+			key ("double",     DOUBLE_TYPE)
+			key ("bool",       BOOL_TYPE)
+			key ("char",       CHAR_TYPE)
+			key ("string",     STRING_TYPE)
+			key ("slice",      SLICE_TYPE)
+			key ("array",      ARRAY_TYPE)
 			
-			//key ("")
+			// user symbols
+			key ("struct",     STRUCT)
+			key ("public",     PUBLIC)
+			key ("private",    PRIVATE)
+			key ("union",      UNION)
+			
+			// control flow
+			key ("if",         IF)
+			key ("elif",       ELIF)
+			key ("else",       ELSE)
+			
+			key ("for",        FOR)
+			key ("in",         IN)
+			key ("while",      WHILE)
+			key ("continue",   CONTINUE)
+			key ("break",      BREAK)
+			
+			key ("key",        SWITCH)
+			key ("case",       CASE)
+			key ("default",    DEFAULT)
+			
+			key ("key",        GOTO)
+			key ("return",     RETURN)
+			
+			key ("start",      START)
+			key ("end",        END)
+			
+			// attributes
+			key ("const",      CONST)
+			key ("static",     STATIC)
+			key ("extern",     EXTERN)
+			key ("volatile",   VOLATILE)
+			
+			key ("stack",      STACK)
+			key ("heap",       HEAP)
+			
+			// preprocessor
+			key ("alias",      ALIAS)
+			
 			goto done;
 		}
 		else goto next;
@@ -187,7 +265,7 @@ read:
 	#define match(C,TOK) if (str.data[str.last-1] == C) { token.id = TOK; goto done; }
 	
 	#define match2(C1,C2,TOK)\
-		if ( str.last > 0           and\
+		if ( str.last > 0               and\
 			 str.data[str.last-1] == C1 and\
 			 current == C2 )\
 		{\
@@ -198,9 +276,9 @@ read:
 			goto done;\
 		}
 	
-	match2 ('/','*', COMMENT_L)
-	match2 ('*','/', COMMENT_R)
-	match2 ('/','/', COMMENT)
+	match2 ('/','*',  COMMENT_L)
+	match2 ('*','/',  COMMENT_R)
+	match2 ('/','/',  COMMENT)
 	
 	match  ('+',      PLUS)
 	match  ('-',      MINUS)
@@ -270,16 +348,4 @@ done:
 	str.trim();
 	token.value = str.data;
 	return token;
-}
-
-void get_tokens(FILE* file, Array<Token>& tokens)
-{
-	Token t;
-	t.id = 1;
-	
-	while (t.id)
-	{
-		t = get_token(file);
-		tokens.append(t);
-	}
 }

@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define ZALGO_EXT_IO
+
 #include "ext.h"
 #include "token.h"
 
@@ -13,9 +15,9 @@ int main(int argc, char** argv)
 	}
 	
 	FILE* file = fopen(argv[1], "r");
-	Array<Token> tokens;
-	tokens.allocate(200);
-	get_tokens(file, tokens);
+	
+	while (get_token(file).id);
+	
 	return 0;
 }
 
