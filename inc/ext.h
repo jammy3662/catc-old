@@ -9,8 +9,18 @@
 
 #include <math.h>
 
-typedef int8_t byte;
-typedef u_int8_t ubyte;
+#define int8    char
+#define int16   short
+#define int32   int
+#define int64   long
+
+#define uint8   unsigned char
+#define uint16  unsigned short
+#define uint32  unsigned int
+#define uint64  unsigned long
+
+//#define byte   int8
+//#define ubyte  uint8
 
 #define PI M_PI
 
@@ -110,17 +120,17 @@ int binint(char* n)
 }
 
 template <class T>
-inline void flagset(T & field, byte bit)
+inline void flagset(T & field, int8 bit)
 {
 	field |= 1 << bit;
 }
 template <class T>
-inline void flagclear(T & field, byte bit)
+inline void flagclear(T & field, int8 bit)
 {
 	field &= ~(1 << bit);
 }
 template <class T>
-inline T flag(T field, byte bit)
+inline T flag(T field, int8 bit)
 {
 	return field & (1 << bit);
 }
@@ -151,11 +161,23 @@ inline T max(T a, T b) {
 	return (a > b) ? a : b;
 }
 
+#define stint int
+#define string string
 struct string
 {
 	char* data = 0x0;
-	int size = 0;
-	int last = 0;
+	stint size = 0;
+	stint last = 0;
+	
+	/*
+	// burn in fucking hell, c++
+	string(char* _1, stint _2, stint _3)
+	{
+		data = _1;
+		size = _2;
+		last = _3;
+	}
+	*/
 	
 	// initialize empty string
 	string()
@@ -166,7 +188,7 @@ struct string
 	}
 
 	// initialize string with specific size
-	string(int s)
+	string(stint s)
 	{
 		size = s;
 		data = talloc(s, char);
@@ -185,9 +207,9 @@ struct string
 	}
 
 	// initialize string with specific data and size
-	string(char* str, int s)
+	string(char* str, stint s)
 	{
-		int strl = strlen(str);
+		stint strl = strlen(str);
 		size = max(s, strl);
 		data = talloc(size, char);
 		memcpy(data, str, strl);
@@ -197,12 +219,25 @@ struct string
 	
 	// initialize string with another string and specific size
 	// (faster than raw char pointer because skip the call to 'strlen')
-	string(string str, int s)
+	string(string str, stint s)
 	{
 		size = max(s, str.size);
 		data = talloc(size, char);
 		memcpy(data, str.data, str.size);
 		last = str.last;
+	}
+	
+	// returns a copy of this string with independent data
+	string clone()
+	{
+		char* str = talloc(size, char);
+		memcpy(str, data, size);
+		
+		// i fucking hate you c++
+		// burn eternally in the flames of fucking hell, c++
+		string ret = *this;
+		ret.data = data;
+		return ret;
 	}
 	
 	void clear()
@@ -211,7 +246,7 @@ struct string
 		size = 0;
 	}
 
-	char& operator[] (int idx)
+	char& operator[] (stint idx)
 	{
 		#ifdef ZALGO_EXT_ERR
 			if (idx >= capacity) fprintf(stderr, "string %p: out of bounds index %i\n", this, idx);
@@ -239,7 +274,7 @@ struct string
 	
 	void append(char* str)
 	{
-		int strl = strlen(str);
+		stint strl = strlen(str);
 		if (space() >= strl) goto write;
 		
 		data = trealloc(data, size + strl, char);
@@ -250,6 +285,8 @@ struct string
 		data[last] = 0;
 	}
 	
+	// writes data to the end of this string
+	// resizes to fit exactly
 	void append(string str)
 	{
 		if (space() >= str.size) goto write;
@@ -281,66 +318,21 @@ struct string
 		last = size - 1;
 		data[last] = 0;
 	}
-};
-
-/*
-struct string
-{
-	char* str;
-//	int size;	// not gonna implement this yet
-	int capacity;
-
-	// initialize empty string
-	string()
+	
+	// get substring of this string
+	string substr(stint from, stint to)
 	{
-		str = 0x0;
-		//size = 0;
-		capacity = 0;
-	}
-
-	// initialize string with specific capacity
-	string(int cap)
-	{
-		capacity = cap;
-		//size = 0;
-		str = (char*) malloc(sizeof(char) * capacity);
-		str[capacity - 1] = 0; // null terminate for compatibility
-	}
-
-	// initialize string with specific data
-	string(char* ini)
-	{
-		capacity = strlen(ini);
-		//size = capacity;
-		str = (char*) malloc(sizeof(char) * capacity);
-		memcpy(str, ini, capacity);
-	}
-
-	// initialize string with specific data and capacity
-	string(char* ini, int cap)
-	{
-		//size = strlen(ini);
-		//capacity = max(size, cap); // capacity must be at least size of initial string
-		capacity = max((int)strlen(ini), cap);
-		str = (char*) malloc(sizeof(char) * capacity);
-		memcpy(str, ini, capacity);
-	}
-
-	void free()
-	{
-		free(str);
-		capacity = 0;
-	}
-
-	char& operator[] (int idx)
-	{
-		#ifdef ZALGO_EXT_ERR
-			if (idx >= capacity) fprintf(stderr, "string %p: out of bounds index %i\n", this, idx);
-			#endif
-		return str[idx];
+		string ret;
+		
+		ret.size = to - from + 2;
+		ret.last = ret.size - 1;
+		ret.data = talloc(size, char);
+		memcpy(ret.data, data + from, ret.size);
+		ret.data[size - 1] = 0;
+		
+		return ret;
 	}
 };
-*/
 
 template <class T>
 struct dlnode { // Doubly linked node

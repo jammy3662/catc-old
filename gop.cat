@@ -1,0 +1,40 @@
+234234
+124.440
+0b101101
+0xff234f
+
+/* wow
+look a 
+comment */
+
+
+// digital style
+
+0o746133
+po4/poop45y/
+
+_dfvjsdf_sdf
+_sdf
+sdf_Asdf
+sdf3451_fs
+sd34
+
+234jgf
+
+include stdlib
+include stdio
+
+define *char = string
+define char = byte
+
+struct Token
+	short id
+	long fpos
+end
+
+fn Array[Token] tokenize (File* file)
+	
+	Array[Token] tokens
+	
+	long fpos = 1
+	Token curtok

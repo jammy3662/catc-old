@@ -3,7 +3,7 @@
 IN="src/main.cc"
 OUT="catc"
 
-FLAGS="-Wno-write-strings -g3 -Iinc"
+FLAGS="-std=c++17 -Wno-write-strings -g3 -Iinc"
 LINK="-lstdc++"
 
 RUN_ON_BUILD=0
